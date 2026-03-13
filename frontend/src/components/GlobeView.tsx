@@ -732,6 +732,20 @@ export default function GlobeView({ payload, layers, visualMode, weatherLayers, 
       }
       if (!valid) continue;
 
+      // Current altitude & velocity from a single propagation at now
+      let altitudeKm: number | null = null;
+      let velocityKmS: number | null = null;
+      const pvNow = satellite.propagate(satrec, new Date(nowMs));
+      if (pvNow?.position && typeof pvNow.position !== "boolean") {
+        const gmstNow = satellite.gstime(new Date(nowMs));
+        const geoNow = satellite.eciToGeodetic(pvNow.position as satellite.EciVec3<number>, gmstNow);
+        altitudeKm = Math.round(geoNow.height as number);
+        if (pvNow.velocity && typeof pvNow.velocity !== "boolean") {
+          const v = pvNow.velocity as satellite.EciVec3<number>;
+          velocityKmS = Math.round(Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2) * 100) / 100;
+        }
+      }
+
       sat.entities.add({
         position: positionProp,
         billboard: new Cesium.BillboardGraphics({
@@ -766,7 +780,7 @@ export default function GlobeView({ payload, layers, visualMode, weatherLayers, 
         }),
         // Store SelectedInfo on the entity so the click handler can read it
         properties: new Cesium.PropertyBag({
-          info: { type: "satellite", data: { norad_id: tle.norad_id, name: tle.name } } satisfies SelectedInfo,
+          info: { type: "satellite", data: { norad_id: tle.norad_id, name: tle.name, altitude_km: altitudeKm, velocity_km_s: velocityKmS } } satisfies SelectedInfo,
         }),
       });
     }
