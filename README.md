@@ -24,16 +24,20 @@ CelesTrak TLE   OpenSky   ADS-B Exchange   USGS Earthquakes
       ▼
 React Frontend
   GlobeView.tsx  (CesiumJS 3D globe, ESRI World Imagery, sun lighting)
-  ├── Aircraft layer   — white/cyan dots coloured by altitude
-  ├── Military layer   — red dots (ADS-B Exchange or ICAO filter)
+  ├── Aircraft layer   — silhouette icons (zoomed in) or dots (zoomed out)
+  │     5 icon categories (WIDE/NARROW/REGIONAL/HELI/GENERAL) rotated by heading
+  │     GPU-side zoom switching via distanceDisplayCondition at 3,000 km
+  │     Typecode fetched from OpenSky metadata API (backend, cached permanently)
+  ├── Aircraft trails  — fading PolylineCollection, last 10 positions per icao24
+  ├── Military layer   — red silhouette icons / dots (ADS-B Exchange or ICAO filter)
   ├── Satellite layer  — billboard icon + name label + 30-min orbital trail
   │     satellite.js runs SGP4 on the client; Cesium SampledPositionProperty
-  │     interpolates smooth motion between samples
+  │     interpolates smooth motion; altitude & velocity shown in info panel
   ├── Earthquake layer — orange/red dots sized by magnitude
   ├── Weather overlays — OpenWeatherMap tile layers (clouds/rain/wind/temp/pressure)
   │     Cesium ImageryLayer per type; toggled independently; no backend required
   └── PostProcessStage — CRT / Night Vision / FLIR shaders
-  ControlPanel.tsx — layer toggles + visual mode + weather toggles
+  ControlPanel.tsx — layer toggles (incl. Trails) + visual mode + weather toggles
   CameraPresets.tsx — one-click flyTo for 8 world cities
 ```
 
@@ -44,6 +48,7 @@ React Frontend
 | Layer | Source | Endpoint | Cost | Refresh |
 | --- | --- | --- | --- | --- |
 | Aircraft | OpenSky Network | `/api/states/all` | Free | 10 s |
+| Aircraft type | OpenSky Metadata | `/api/metadata/aircraft/icao/{icao24}` | Free | Permanent cache |
 | Military | ADS-B Exchange | `/v2/mil/` (fallback: ICAO prefix filter) | Free | 10 s |
 | Satellites | CelesTrak | `celestrak.org/pub/TLE/active.txt` | Free | TLE cache 30 min |
 | Earthquakes | USGS FDSNWS | `/fdsnws/event/1/query?minmagnitude=2.5` | Free | 60 s |
@@ -128,10 +133,11 @@ docker compose up --build
 
 | Layer | Colour | Description |
 | --- | --- | --- |
-| Aircraft | White → Cyan | Civil flights; cyan = high altitude (> 9,000 m) |
-| Military | Red | Military aircraft via ADS-B Exchange or ICAO prefix fallback |
-| Satellites | Cyan | Up to 500 active satellites, animated in real time with a 30-minute orbital trail |
+| Aircraft | White → Cyan | Civil flights; top-down silhouette icons (zoomed in) or dots (zoomed out); cyan = high altitude (> 9,000 m) |
+| Military | Red | Military aircraft via ADS-B Exchange or ICAO prefix fallback; red silhouette icons or dots |
+| Satellites | Cyan | Up to 500 active satellites, animated in real time with a 30-minute orbital trail; click to see altitude & velocity |
 | Earthquakes | Orange → Red | M2.5+ events sized by magnitude |
+| Trails | White → Cyan | Fading polyline trail behind each aircraft showing the last 10 positions (~100 s of history) |
 
 Click the coloured button beside each layer name to toggle it on or off.
 
@@ -175,6 +181,7 @@ Geospatial Tracker/
 │   ├── ingestion/
 │   │   ├── opensky.py           # OpenSky Network — civil aircraft (global)
 │   │   ├── adsb_exchange.py     # ADS-B Exchange — military aircraft
+│   │   ├── aircraft_metadata.py # OpenSky metadata API — typecode cache (permanent)
 │   │   ├── celestrak.py         # CelesTrak — raw TLE records (no server-side SGP4)
 │   │   └── usgs.py              # USGS FDSNWS — earthquake events
 │   ├── models/
@@ -237,7 +244,19 @@ pytest tests/ -v
 
 ```json
 {
-  "aircraft":   { "type": "FeatureCollection", "features": [...] },
+  "aircraft": {
+    "type": "FeatureCollection",
+    "features": [{
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.78, 40.64] },
+      "properties": {
+        "icao24": "a1b2c3", "callsign": "UAL123", "origin_country": "United States",
+        "altitude": 11278, "velocity": 245, "heading": 83, "vertical_rate": 0,
+        "on_ground": false, "trail": [[-73.9, 40.6], [-73.85, 40.62], [-73.78, 40.64]],
+        "typecode": "B738"
+      }
+    }]
+  },
   "military":   { "type": "FeatureCollection", "features": [...] },
   "tles": [
     { "norad_id": "25544", "name": "ISS (ZARYA)", "line1": "1 25544U ...", "line2": "2 25544 ..." },
@@ -289,5 +308,7 @@ See [Enhancements.md](Enhancements.md) for the full roadmap. Quick wins:
 
 - **Faster updates** — lower `POLLING_INTERVAL_SECONDS` in `.env` (respect rate limits above)
 - **More satellites** — raise `MAX_SATELLITES` in [backend/ingestion/celestrak.py](backend/ingestion/celestrak.py) (currently 500; raising it increases frontend SGP4 compute time on TLE refresh)
+- **Longer trails** — raise `TRAIL_MAX_LENGTH` in [backend/main.py](backend/main.py) (currently 10 positions ≈ 100 s of history)
+- **Icon zoom threshold** — change `ICON_MAX_DISTANCE` in [frontend/src/components/GlobeView.tsx](frontend/src/components/GlobeView.tsx) (currently 3,000 km camera height)
 - **Different basemap** — swap the ESRI URL in [frontend/src/components/GlobeView.tsx](frontend/src/components/GlobeView.tsx) for any `{z}/{x}/{y}` tile server
-- **Aircraft trails** — store position history per `icao24` and draw `Polyline` primitives in GlobeView
+- **Typecode fetch rate** — raise `MAX_FETCH_PER_CYCLE` in [backend/ingestion/aircraft_metadata.py](backend/ingestion/aircraft_metadata.py) (currently 5 new aircraft types per broadcast cycle)
