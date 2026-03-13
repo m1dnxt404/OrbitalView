@@ -191,6 +191,7 @@ Geospatial Tracker/
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx              # Root — wires layers, visualMode, viewer ref
+│   │   ├── settings.ts          # Centralised frontend tuning constants
 │   │   ├── types.ts             # TypeScript interfaces (WorldPayload, TLERecord, etc.)
 │   │   ├── vite-env.d.ts        # Vite client type reference
 │   │   ├── hooks/
@@ -221,6 +222,9 @@ Geospatial Tracker/
 | `OPENSKY_PASSWORD` | No | — | Legacy Basic Auth password |
 | `ADSB_API_KEY` | No | — | ADS-B Exchange key; falls back to ICAO filter without it |
 | `POLLING_INTERVAL_SECONDS` | No | `10` | How often to fetch all data sources |
+| `MAX_SATELLITES` | No | `500` | Max TLE records sent per broadcast (backend cap) |
+| `TRAIL_MAX_LENGTH` | No | `10` | Max position history points per aircraft (≈ 10 s each) |
+| `METADATA_FETCH_PER_CYCLE` | No | `5` | Max new aircraft typecodes fetched per broadcast cycle |
 | `VITE_WS_URL` | No | `ws://localhost:8000/ws/live` | WebSocket URL override (frontend) |
 | `VITE_OWM_API_KEY` | No | — | OpenWeatherMap API key; enables weather tile overlays (free tier) |
 
@@ -309,8 +313,9 @@ Weather tile requests are made directly by the browser (no backend involvement).
 See [Enhancements.md](Enhancements.md) for the full roadmap. Quick wins:
 
 - **Faster updates** — lower `POLLING_INTERVAL_SECONDS` in `.env` (respect rate limits above)
-- **More satellites** — raise `MAX_SATELLITES` in [backend/ingestion/celestrak.py](backend/ingestion/celestrak.py) (currently 500; raising it increases frontend SGP4 compute time on TLE refresh)
-- **Longer trails** — raise `TRAIL_MAX_LENGTH` in [backend/main.py](backend/main.py) (currently 10 positions ≈ 100 s of history)
-- **Icon zoom threshold** — change `ICON_MAX_DISTANCE` in [frontend/src/components/GlobeView.tsx](frontend/src/components/GlobeView.tsx) (currently 3,000 km camera height)
+- **More satellites** — raise `MAX_SATELLITES` in `.env` or [frontend/src/settings.ts](frontend/src/settings.ts) (default 500; raising it increases frontend SGP4 compute time)
+- **Longer trails** — raise `TRAIL_MAX_LENGTH` in `.env` (default 10 positions ≈ 100 s of history)
+- **Icon zoom threshold** — change `ICON_MAX_DISTANCE` in [frontend/src/settings.ts](frontend/src/settings.ts) (default 3,000 km camera height)
+- **Satellite trail / window** — tune `SATELLITE_TRAIL_TIME_SEC` and `SATELLITE_HALF_WINDOW_SEC` in [frontend/src/settings.ts](frontend/src/settings.ts)
 - **Different basemap** — swap the ESRI URL in [frontend/src/components/GlobeView.tsx](frontend/src/components/GlobeView.tsx) for any `{z}/{x}/{y}` tile server
-- **Typecode fetch rate** — raise `MAX_FETCH_PER_CYCLE` in [backend/ingestion/aircraft_metadata.py](backend/ingestion/aircraft_metadata.py) (currently 5 new aircraft types per broadcast cycle)
+- **Typecode fetch rate** — raise `METADATA_FETCH_PER_CYCLE` in `.env` (default 5 new aircraft types per broadcast cycle)

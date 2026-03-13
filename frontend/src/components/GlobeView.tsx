@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import * as satellite from "satellite.js";
 import type { WorldPayload, LayerVisibility, VisualMode, WeatherLayerKey, WeatherLayers } from "../types";
+import settings from "../settings";
 
 interface GlobeViewProps {
   payload: WorldPayload | null;
@@ -241,7 +242,7 @@ const ICON_SIZES: Record<AircraftCategory, number> = {
 };
 
 // Distance (metres from camera to surface) above which icons switch to dots.
-const ICON_MAX_DISTANCE = 3_000_000;
+const ICON_MAX_DISTANCE = settings.ICON_MAX_DISTANCE;
 
 function getAircraftCategory(typecode: string): AircraftCategory {
   const t = (typecode ?? "").toUpperCase();
@@ -701,10 +702,10 @@ export default function GlobeView({ payload, layers, visualMode, weatherLayers, 
     sat.entities.removeAll();
 
     const nowMs = Date.now();
-    const STEP_SEC = 120;         // sample every 2 minutes
-    const HALF_WINDOW_SEC = 2700; // ±45 minutes → ~45 samples per satellite
+    const STEP_SEC = settings.SATELLITE_STEP_SEC;
+    const HALF_WINDOW_SEC = settings.SATELLITE_HALF_WINDOW_SEC;
 
-    for (const tle of payload.tles ?? []) {
+    for (const tle of (payload.tles ?? []).slice(0, settings.MAX_SATELLITES)) {
       const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
       const positionProp = new Cesium.SampledPositionProperty();
       positionProp.setInterpolationOptions({
@@ -776,7 +777,7 @@ export default function GlobeView({ payload, layers, visualMode, weatherLayers, 
           }),
           width:     2,
           leadTime:  new Cesium.ConstantProperty(0),
-          trailTime: new Cesium.ConstantProperty(1800),
+          trailTime: new Cesium.ConstantProperty(settings.SATELLITE_TRAIL_TIME_SEC),
         }),
         // Store SelectedInfo on the entity so the click handler can read it
         properties: new Cesium.PropertyBag({

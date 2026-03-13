@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     OPENSKY_PASSWORD: str = ""
     ADSB_API_KEY: str = ""
     POLLING_INTERVAL_SECONDS: int = 10
+    MAX_SATELLITES: int = 500
+    TRAIL_MAX_LENGTH: int = 10
+    METADATA_FETCH_PER_CYCLE: int = 5
 
     class Config:
         env_file = str(_ENV_FILE)

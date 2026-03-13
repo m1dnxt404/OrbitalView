@@ -60,7 +60,6 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 _position_history: dict[str, deque] = {}
-TRAIL_MAX_LENGTH = 10
 
 
 def _update_position_history(aircraft_list: list[AircraftPosition]) -> None:
@@ -70,7 +69,7 @@ def _update_position_history(aircraft_list: list[AircraftPosition]) -> None:
             continue
         active.add(ac.icao24)
         if ac.icao24 not in _position_history:
-            _position_history[ac.icao24] = deque(maxlen=TRAIL_MAX_LENGTH)
+            _position_history[ac.icao24] = deque(maxlen=settings.TRAIL_MAX_LENGTH)
         _position_history[ac.icao24].append([ac.longitude, ac.latitude, ac.altitude])
     for key in list(_position_history):
         if key not in active:

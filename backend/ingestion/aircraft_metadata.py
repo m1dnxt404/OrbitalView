@@ -9,7 +9,6 @@ from ingestion.opensky import _get_bearer_token
 logger = logging.getLogger(__name__)
 
 METADATA_URL = "https://opensky-network.org/api/metadata/aircraft/icao/{}"
-MAX_FETCH_PER_CYCLE = 5
 
 # Permanent in-memory cache — aircraft type doesn't change, so no TTL needed.
 _typecode_cache: dict[str, str] = {}  # icao24 → typecode (empty string = unknown/failed)
@@ -18,14 +17,14 @@ _typecode_cache: dict[str, str] = {}  # icao24 → typecode (empty string = unkn
 async def fetch_new_typecodes(icao24_list: list[str]) -> None:
     """Fetch typecodes for aircraft not yet in cache.
 
-    Capped at MAX_FETCH_PER_CYCLE requests per call to avoid rate-limiting.
+    Capped at settings.METADATA_FETCH_PER_CYCLE requests per call to avoid rate-limiting.
     On any error or 404, caches an empty string to prevent retrying the same aircraft.
     """
     unknown = [i for i in icao24_list if i and i not in _typecode_cache]
     if not unknown:
         return
 
-    to_fetch = unknown[:MAX_FETCH_PER_CYCLE]
+    to_fetch = unknown[:settings.METADATA_FETCH_PER_CYCLE]
     async with httpx.AsyncClient(timeout=5.0) as client:
         await asyncio.gather(
             *[_fetch_one(client, icao24) for icao24 in to_fetch],

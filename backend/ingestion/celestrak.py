@@ -4,11 +4,11 @@ import logging
 import time
 
 from models.schemas import TLERecord
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 CELESTRAK_URL = "https://celestrak.org/pub/TLE/active.txt"
-MAX_SATELLITES = 500
 CACHE_TTL_SECONDS = 1800  # 30 minutes
 
 _TIMEOUT = httpx.Timeout(connect=45.0, read=60.0, write=5.0, pool=5.0)
@@ -78,7 +78,7 @@ async def fetch_tles() -> list[TLERecord]:
 
     result = [
         TLERecord(norad_id=l1[2:7].strip(), name=name, line1=l1, line2=l2)
-        for name, l1, l2 in _tle_cache[:MAX_SATELLITES]
+        for name, l1, l2 in _tle_cache[:settings.MAX_SATELLITES]
     ]
     logger.info("Returning %d TLE records", len(result))
     return result
