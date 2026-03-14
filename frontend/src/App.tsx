@@ -5,6 +5,7 @@ import { ControlPanel } from "./components/ControlPanel";
 import { CameraPresets } from "./components/CameraPresets";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { useHealthPoll } from "./hooks/useHealthPoll";
 import type { LayerVisibility, VisualMode, WeatherLayers } from "./types";
 
 const WS_URL = (import.meta.env.VITE_WS_URL as string) ?? "ws://localhost:8000/ws/live";
@@ -27,6 +28,7 @@ const DEFAULT_WEATHER: WeatherLayers = {
 
 export default function App(): React.ReactElement {
   const { payload, status } = useWebSocket(WS_URL);
+  const health = useHealthPoll();
 
   const [layers, setLayers] = useState<LayerVisibility>(DEFAULT_LAYERS);
   const [visualMode, setVisualMode] = useState<VisualMode>("normal");
@@ -82,6 +84,7 @@ export default function App(): React.ReactElement {
         onVisualModeChange={setVisualMode}
         weatherLayers={weatherLayers}
         onWeatherToggle={handleWeatherToggle}
+        health={health}
       />
       <CameraPresets viewer={viewerRef.current} />
     </div>

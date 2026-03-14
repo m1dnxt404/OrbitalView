@@ -21,6 +21,16 @@ _cache_time: float = 0.0
 _rate_limited_until: float = 0.0
 _backoff_seconds: float = 60.0
 _MAX_RATE_LIMIT_BACKOFF: float = 300.0
+_last_success_at: float = 0.0
+
+
+def get_source_status() -> dict:
+    now = time.monotonic()
+    return {
+        "last_success": _last_success_at or None,
+        "is_rate_limited": now < _rate_limited_until,
+        "rate_limited_for_s": max(0, int(_rate_limited_until - now)),
+    }
 
 
 def _parse_tle_text(text: str) -> list[tuple[str, str, str]]:
@@ -46,7 +56,7 @@ async def fetch_tles() -> list[TLERecord]:
     SGP4 propagation is handled on the frontend via satellite.js.
     Returns an empty list on failure — never raises.
     """
-    global _tle_cache, _cache_time, _rate_limited_until, _backoff_seconds
+    global _tle_cache, _cache_time, _rate_limited_until, _backoff_seconds, _last_success_at
 
     now = time.monotonic()
     if now < _rate_limited_until:
@@ -67,6 +77,7 @@ async def fetch_tles() -> list[TLERecord]:
                     resp.raise_for_status()
                     _tle_cache = _parse_tle_text(resp.text)
                     _cache_time = now
+                    _last_success_at = time.time()
                     _backoff_seconds = 60.0
                     logger.info("Refreshed TLE cache: %d entries", len(_tle_cache))
                     break

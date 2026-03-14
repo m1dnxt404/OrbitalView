@@ -12,6 +12,16 @@ ADSB_MILITARY_URL = "https://api.adsbexchange.com/v2/mil/"
 _rate_limited_until: float = 0.0
 _backoff_seconds: float = 60.0
 _MAX_RATE_LIMIT_BACKOFF: float = 300.0
+_last_success_at: float = 0.0
+
+
+def get_source_status() -> dict:
+    now = time.monotonic()
+    return {
+        "last_success": _last_success_at or None,
+        "is_rate_limited": now < _rate_limited_until,
+        "rate_limited_for_s": max(0, int(_rate_limited_until - now)),
+    }
 
 # Known military ICAO hex prefix ranges used as fallback when no API key is set.
 # These cover major air forces (USAF, USN, USMC, RAF, French AF, German AF, etc.)
@@ -53,7 +63,7 @@ async def fetch_military_aircraft(
 
 async def _fetch_from_adsb_exchange(api_key: str) -> list[AircraftPosition]:
     """Fetch from ADS-B Exchange military endpoint."""
-    global _rate_limited_until, _backoff_seconds
+    global _rate_limited_until, _backoff_seconds, _last_success_at
 
     now = time.monotonic()
     if now < _rate_limited_until:
@@ -90,6 +100,7 @@ async def _fetch_from_adsb_exchange(api_key: str) -> list[AircraftPosition]:
             except (KeyError, TypeError, ValueError):
                 continue
 
+        _last_success_at = time.time()
         _backoff_seconds = 60.0
         logger.info("Fetched %d military aircraft from ADS-B Exchange", len(aircraft_list))
         return aircraft_list

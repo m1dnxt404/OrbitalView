@@ -1,5 +1,5 @@
 import React from "react";
-import type { LayerVisibility, VisualMode, ConnectionStatus, WeatherLayerKey, WeatherLayers } from "../types";
+import type { LayerVisibility, VisualMode, ConnectionStatus, WeatherLayerKey, WeatherLayers, HealthSources, SourceStatus } from "../types";
 
 interface ControlPanelProps {
   counts: {
@@ -16,6 +16,24 @@ interface ControlPanelProps {
   onVisualModeChange: (mode: VisualMode) => void;
   weatherLayers: WeatherLayers;
   onWeatherToggle: (layer: WeatherLayerKey) => void;
+  health?: HealthSources | null;
+}
+
+const LAYER_SOURCE: Partial<Record<keyof LayerVisibility, keyof HealthSources>> = {
+  aircraft:    "opensky",
+  military:    "adsb",
+  satellites:  "celestrak",
+  earthquakes: "usgs",
+  trails:      "opensky",
+};
+
+const POLLING_INTERVAL = 10; // seconds — matches backend default
+
+function sourceColor(s: SourceStatus | undefined): string {
+  if (!s || s.last_success === null) return "#555";
+  if (s.is_rate_limited) return "#f59e0b";
+  if (Date.now() / 1000 - s.last_success > POLLING_INTERVAL * 3) return "#ef4444";
+  return "#22c55e";
 }
 
 const LAYER_CONFIG: Array<{
@@ -68,6 +86,7 @@ export function ControlPanel({
   onVisualModeChange,
   weatherLayers,
   onWeatherToggle,
+  health,
 }: ControlPanelProps): React.ReactElement {
   const totalTracked =
     counts.aircraft + counts.military + counts.satellites + counts.earthquakes;
@@ -107,6 +126,16 @@ export function ControlPanel({
           <span style={{ ...styles.layerLabel, color: layers[key] ? "#E2E8F0" : "#64748B" }}>
             {label}
           </span>
+          {health && LAYER_SOURCE[key] && (
+            <span style={{
+              display: "inline-block",
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              backgroundColor: sourceColor(health[LAYER_SOURCE[key]!]),
+              flexShrink: 0,
+            }} />
+          )}
           <span style={{ ...styles.layerCount, color: layers[key] ? color : "#475569" }}>
             {counts[key].toLocaleString()}
           </span>

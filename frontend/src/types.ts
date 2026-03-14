@@ -75,3 +75,16 @@ export interface WeatherLayers {
   temp:     boolean;
   pressure: boolean;
 }
+
+export interface SourceStatus {
+  last_success: number | null;
+  is_rate_limited: boolean;
+  rate_limited_for_s: number;
+}
+
+export interface HealthSources {
+  opensky: SourceStatus;
+  celestrak: SourceStatus;
+  usgs: SourceStatus;
+  adsb: SourceStatus;
+}

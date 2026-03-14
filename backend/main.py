@@ -7,10 +7,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from ingestion.opensky import fetch_aircraft
-from ingestion.adsb_exchange import fetch_military_aircraft
-from ingestion.celestrak import fetch_tles
-from ingestion.usgs import fetch_earthquakes
+from ingestion.opensky import fetch_aircraft, get_source_status as opensky_status
+from ingestion.adsb_exchange import fetch_military_aircraft, get_source_status as adsb_status
+from ingestion.celestrak import fetch_tles, get_source_status as celestrak_status
+from ingestion.usgs import fetch_earthquakes, get_source_status as usgs_status
 from ingestion.aircraft_metadata import fetch_new_typecodes, get_typecode
 from models.schemas import (
     AircraftPosition,
@@ -203,6 +203,20 @@ async def health() -> dict:
         "status": "healthy",
         "connections": manager.connection_count,
         "polling_interval": settings.POLLING_INTERVAL_SECONDS,
+    }
+
+
+@app.get("/health/detailed")
+async def health_detailed() -> dict:
+    return {
+        "status": "healthy",
+        "connections": manager.connection_count,
+        "sources": {
+            "opensky":   opensky_status(),
+            "celestrak": celestrak_status(),
+            "usgs":      usgs_status(),
+            "adsb":      adsb_status(),
+        },
     }
 
 

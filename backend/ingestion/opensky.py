@@ -52,6 +52,16 @@ _token_expires_at: float = 0.0
 _rate_limited_until: float = 0.0
 _backoff_seconds: float = 60.0
 _MAX_RATE_LIMIT_BACKOFF: float = 300.0
+_last_success_at: float = 0.0
+
+
+def get_source_status() -> dict:
+    now = time.monotonic()
+    return {
+        "last_success": _last_success_at or None,
+        "is_rate_limited": now < _rate_limited_until,
+        "rate_limited_for_s": max(0, int(_rate_limited_until - now)),
+    }
 
 
 async def _get_bearer_token() -> str:
@@ -122,7 +132,7 @@ async def fetch_aircraft() -> list[AircraftPosition]:
 
     Returns an empty list on any network failure — never raises.
     """
-    global _aircraft_cache, _aircraft_cache_time, _rate_limited_until, _backoff_seconds
+    global _aircraft_cache, _aircraft_cache_time, _rate_limited_until, _backoff_seconds, _last_success_at
 
     now = time.monotonic()
     if now < _rate_limited_until:
@@ -166,6 +176,7 @@ async def fetch_aircraft() -> list[AircraftPosition]:
 
             _aircraft_cache = result
             _aircraft_cache_time = time.monotonic()
+            _last_success_at = time.time()
             _backoff_seconds = 60.0
             logger.info("Fetched %d aircraft from OpenSky", len(result))
             return result
