@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { WorldPayload, ConnectionStatus } from "../types";
+import { WorldPayloadSchema } from "../schemas";
 
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 30000;
@@ -35,8 +36,13 @@ export function useWebSocket(url: string): UseWebSocketResult {
     ws.onmessage = (event: MessageEvent) => {
       if (!isMountedRef.current) return;
       try {
-        const data = JSON.parse(event.data as string) as WorldPayload;
-        setPayload(data);
+        const raw = JSON.parse(event.data as string);
+        const result = WorldPayloadSchema.safeParse(raw);
+        if (!result.success) {
+          console.error("[useWebSocket] Invalid payload:", result.error.issues);
+          return;
+        }
+        setPayload(result.data as WorldPayload);
       } catch {
         console.error("[useWebSocket] Failed to parse message");
       }
