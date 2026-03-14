@@ -1,5 +1,6 @@
 import httpx
 import logging
+import time
 
 from models.schemas import AircraftPosition
 from config import settings
@@ -7,6 +8,10 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 ADSB_MILITARY_URL = "https://api.adsbexchange.com/v2/mil/"
+
+_rate_limited_until: float = 0.0
+_backoff_seconds: float = 60.0
+_MAX_RATE_LIMIT_BACKOFF: float = 300.0
 
 # Known military ICAO hex prefix ranges used as fallback when no API key is set.
 # These cover major air forces (USAF, USN, USMC, RAF, French AF, German AF, etc.)
@@ -48,6 +53,13 @@ async def fetch_military_aircraft(
 
 async def _fetch_from_adsb_exchange(api_key: str) -> list[AircraftPosition]:
     """Fetch from ADS-B Exchange military endpoint."""
+    global _rate_limited_until, _backoff_seconds
+
+    now = time.monotonic()
+    if now < _rate_limited_until:
+        logger.info("ADS-B Exchange rate-limited — skipping for %ds", int(_rate_limited_until - now))
+        return []
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
@@ -78,11 +90,20 @@ async def _fetch_from_adsb_exchange(api_key: str) -> list[AircraftPosition]:
             except (KeyError, TypeError, ValueError):
                 continue
 
+        _backoff_seconds = 60.0
         logger.info("Fetched %d military aircraft from ADS-B Exchange", len(aircraft_list))
         return aircraft_list
 
     except httpx.TimeoutException:
         logger.error("ADS-B Exchange request timed out")
+        return []
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429:
+            _rate_limited_until = time.monotonic() + _backoff_seconds
+            logger.warning("Rate limited by ADS-B Exchange — backing off for %ds", int(_backoff_seconds))
+            _backoff_seconds = min(_backoff_seconds * 2, _MAX_RATE_LIMIT_BACKOFF)
+            return []
+        logger.exception("ADS-B Exchange fetch failed: %s", exc)
         return []
     except Exception as exc:
         logger.exception("ADS-B Exchange fetch failed: %s", exc)

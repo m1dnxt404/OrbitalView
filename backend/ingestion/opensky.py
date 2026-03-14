@@ -49,6 +49,10 @@ _IDX_VERTICAL_RATE = 11
 _token: str = ""
 _token_expires_at: float = 0.0
 
+_rate_limited_until: float = 0.0
+_backoff_seconds: float = 60.0
+_MAX_RATE_LIMIT_BACKOFF: float = 300.0
+
 
 async def _get_bearer_token() -> str:
     """Obtain (or return a cached) OAuth2 bearer token via client credentials."""
@@ -118,10 +122,14 @@ async def fetch_aircraft() -> list[AircraftPosition]:
 
     Returns an empty list on any network failure — never raises.
     """
-    global _aircraft_cache, _aircraft_cache_time
+    global _aircraft_cache, _aircraft_cache_time, _rate_limited_until, _backoff_seconds
+
+    now = time.monotonic()
+    if now < _rate_limited_until:
+        logger.info("OpenSky rate-limited — skipping for %ds", int(_rate_limited_until - now))
+        return _aircraft_cache
 
     # Fast path — serve from cache without acquiring the lock.
-    now = time.monotonic()
     if _aircraft_cache and (now - _aircraft_cache_time) < AIRCRAFT_CACHE_TTL:
         logger.debug("fetch_aircraft: cache hit (%d aircraft)", len(_aircraft_cache))
         return _aircraft_cache
@@ -158,6 +166,7 @@ async def fetch_aircraft() -> list[AircraftPosition]:
 
             _aircraft_cache = result
             _aircraft_cache_time = time.monotonic()
+            _backoff_seconds = 60.0
             logger.info("Fetched %d aircraft from OpenSky", len(result))
             return result
 
@@ -165,6 +174,11 @@ async def fetch_aircraft() -> list[AircraftPosition]:
             logger.error("OpenSky request timed out")
             return _aircraft_cache  # return stale data rather than empty list
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                _rate_limited_until = time.monotonic() + _backoff_seconds
+                logger.warning("Rate limited by OpenSky — backing off for %ds", int(_backoff_seconds))
+                _backoff_seconds = min(_backoff_seconds * 2, _MAX_RATE_LIMIT_BACKOFF)
+                return _aircraft_cache
             logger.error("OpenSky HTTP %s: %s", exc.response.status_code, exc.response.text[:200])
             return _aircraft_cache
         except Exception as exc:
