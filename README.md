@@ -13,12 +13,13 @@ CelesTrak TLE   OpenSky   ADS-B Exchange   USGS Earthquakes
       │             │            │                 │
       └─────────────▼────────────▼─────────────────▼──────┐
                        FastAPI Backend                      │
-           ingestion/opensky.py      — civil aircraft       │
-           ingestion/adsb_exchange.py — military aircraft   │
-           ingestion/celestrak.py   — TLE records (cached)  │
-           ingestion/usgs.py        — earthquake events     │
-                                                            │
-           broadcast_loop() → WorldPayload                  │
+           ingestion/opensky.py      — civil aircraft (429 backoff)       │
+           ingestion/adsb_exchange.py — military aircraft (429 backoff)   │
+           ingestion/celestrak.py   — TLE records (30 min cache, 429 backoff) │
+           ingestion/usgs.py        — earthquake events (429 backoff)     │
+                                                                          │
+           broadcast_loop() → WorldPayload                                │
+           GET /health/detailed   → per-source status                     │
       ┌────────────────────────────────────────────────────┘
       │  WebSocket /ws/live
       ▼
@@ -38,8 +39,10 @@ React Frontend
   │     Cesium ImageryLayer per type; toggled independently; no backend required
   └── PostProcessStage — CRT / Night Vision / FLIR shaders
   ErrorBoundary.tsx — catches GlobeView render errors; shows "Rendering error — click to retry" fallback
-  ControlPanel.tsx — layer toggles (incl. Trails) + visual mode + weather toggles
+  ControlPanel.tsx — layer toggles (incl. Trails) + visual mode + weather toggles + per-source health dots
   CameraPresets.tsx — one-click flyTo for 8 world cities
+  useWebSocket.ts  — WS hook; validates every message with Zod schema before updating state
+  useHealthPoll.ts — polls /health/detailed every 30 s; feeds green/amber/red dots into ControlPanel
 ```
 
 ---
@@ -194,12 +197,14 @@ Geospatial Tracker/
 │   │   ├── settings.ts          # Centralised frontend tuning constants
 │   │   ├── types.ts             # TypeScript interfaces (WorldPayload, TLERecord, etc.)
 │   │   ├── vite-env.d.ts        # Vite client type reference
+│   │   ├── schemas.ts           # Zod schema for runtime WorldPayload validation
 │   │   ├── hooks/
-│   │   │   └── useWebSocket.ts  # WS hook with exponential backoff reconnect
+│   │   │   ├── useWebSocket.ts  # WS hook with exponential backoff reconnect + Zod validation
+│   │   │   └── useHealthPoll.ts # Polls /health/detailed every 30 s for source status dots
 │   │   └── components/
 │   │       ├── GlobeView.tsx    # CesiumJS 3D globe + 4 data layers + weather imagery + GLSL shaders
 │   │       ├── ErrorBoundary.tsx# Catches GlobeView render errors; shows retry fallback
-│   │       ├── ControlPanel.tsx # Layer toggles + visual mode + weather toggles
+│   │       ├── ControlPanel.tsx # Layer toggles + visual mode + weather toggles + source health dots
 │   │       └── CameraPresets.tsx# 8-city flyTo shortcuts
 │   ├── vite.config.ts           # Vite + vite-plugin-cesium
 │   ├── Dockerfile
@@ -244,6 +249,7 @@ pytest tests/ -v
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/health` | GET | Returns connection count and polling interval |
+| `/health/detailed` | GET | Per-source status: last-success timestamp, rate-limit state for OpenSky / CelesTrak / USGS / ADS-B |
 | `/ws/live` | WebSocket | WorldPayload pushed every 10 s |
 
 **WebSocket message format:**
