@@ -28,8 +28,10 @@ React Frontend
   ├── Aircraft layer   — silhouette icons (zoomed in) or dots (zoomed out)
   │     5 icon categories (WIDE/NARROW/REGIONAL/HELI/GENERAL) rotated by heading
   │     GPU-side zoom switching via distanceDisplayCondition at 3,000 km
+  │     Colour gradient green→yellow→cyan (0–15,000 m) via Cesium.Color.lerp()
   │     Typecode fetched from OpenSky metadata API (backend, cached permanently)
   ├── Aircraft trails  — fading PolylineCollection, last 10 positions per icao24
+  ├── Heatmap layer    — 1°×1° density grid rasterised to canvas → SingleTileImageryProvider
   ├── Military layer   — red silhouette icons / dots (ADS-B Exchange or ICAO filter)
   ├── Satellite layer  — billboard icon + name label + 30-min orbital trail
   │     satellite.js runs SGP4 on the client; Cesium SampledPositionProperty
@@ -137,11 +139,12 @@ docker compose up --build
 
 | Layer | Colour | Description |
 | --- | --- | --- |
-| Aircraft | White → Cyan | Civil flights; top-down silhouette icons (zoomed in) or dots (zoomed out); cyan = high altitude (> 9,000 m) |
+| Aircraft | Green → Yellow → Cyan | Civil flights; top-down silhouette icons (zoomed in) or dots (zoomed out); colour encodes altitude 0–15,000 m |
 | Military | Red | Military aircraft via ADS-B Exchange or ICAO prefix fallback; red silhouette icons or dots |
 | Satellites | Cyan | Up to 500 active satellites, animated in real time with a 30-minute orbital trail; click to see altitude & velocity |
 | Earthquakes | Orange → Red | M2.5+ events sized by magnitude |
-| Trails | White → Cyan | Fading polyline trail behind each aircraft showing the last 10 positions (~100 s of history) |
+| Trails | Green → Yellow → Cyan | Fading polyline trail behind each aircraft showing the last 10 positions (~100 s of history) |
+| Heatmap | Blue → Red | Aircraft density overlay; filterable by altitude band via Min/Max sliders |
 
 Click the coloured button beside each layer name to toggle it on or off.
 
@@ -180,6 +183,7 @@ Geospatial Tracker/
 ├── backend/
 │   ├── main.py                  # FastAPI + WebSocket broadcast hub (WorldPayload)
 │   ├── config.py                # Settings loaded from .env
+│   ├── cache.py                 # Async Redis wrapper with no-op fallback (optional persistence)
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   ├── ingestion/
@@ -230,6 +234,7 @@ Geospatial Tracker/
 | `MAX_SATELLITES` | No | `500` | Max TLE records sent per broadcast (backend cap) |
 | `TRAIL_MAX_LENGTH` | No | `10` | Max position history points per aircraft (≈ 10 s each) |
 | `METADATA_FETCH_PER_CYCLE` | No | `5` | Max new aircraft typecodes fetched per broadcast cycle |
+| `REDIS_URL` | No | — | Redis connection string (e.g. `redis://localhost:6379/0`); leave empty to disable — all caches remain in-memory only |
 | `VITE_WS_URL` | No | `ws://localhost:8000/ws/live` | WebSocket URL override (frontend) |
 | `VITE_OWM_API_KEY` | No | — | OpenWeatherMap API key; enables weather tile overlays (free tier) |
 
